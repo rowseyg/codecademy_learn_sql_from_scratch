@@ -1,0 +1,167 @@
+/*
+-- Questions 1.1, 1.2, 1.3
+ SELECT 
+ 	MIN(subscription_start) AS [First Month], 
+  MAX(subscription_end) AS [Last Month], 
+  COUNT(DISTINCT segment) AS [Number of Segments] 
+ FROM subscriptions;
+  
+	SELECT * FROM subscriptions LIMIT 100;
+*/
+
+
+
+/*
+ -- Question 2.1
+ WITH months AS
+ (SELECT 
+  '2017-01-01' AS first_day, 
+  '2017-01-31' AS last_day
+  	UNION
+  SELECT 
+  '2017-02-01' AS first_day, 
+  '2017-02-28' AS last_day
+  	UNION
+  SELECT 
+  '2017-03-01' AS first_day, 
+  '2017-03-31' AS last_day
+ ),
+ 
+ -- Question 2.2
+ crossjoin AS
+ (SELECT * FROM subscriptions
+  CROSS JOIN months
+ ),
+ 
+-- Question 2.3
+status AS
+(SELECT id, first_day AS month,
+
+ CASE
+	WHEN segment = 87 AND
+ 		(subscription_start < first_day) AND
+      (subscription_end >= first_day OR subscription_end IS NULL) THEN 1 ELSE 0 
+ 	END
+ AS is_active_87,
+ 
+ CASE
+ 	WHEN segment = 30 AND
+ 	(subscription_start < first_day) AND
+  	(subscription_end >= first_day OR subscription_end IS NULL) THEN 1 ELSE 0
+ 	END
+ AS is_active_30,
+
+ CASE
+ 	WHEN segment = 87 AND
+ 	(subscription_end BETWEEN first_day AND last_day) THEN 1 ELSE 0
+ 	END
+ AS is_canceled_87,
+ 
+ CASE
+ 	WHEN segment = 30 AND
+ 	(subscription_end BETWEEN first_day AND last_day) THEN 1 ELSE 0
+ 	END
+ AS is_canceled_30
+ 
+ FROM crossjoin
+),
+-- Question 2.4
+status_aggregate AS
+(SELECT month,
+ 	SUM(is_active_87) AS sum_active_87,
+ 	SUM(is_active_30) AS sum_active_30,
+ 	SUM(is_canceled_87) AS sum_canceled_87,
+ 	SUM(is_canceled_30) AS sum_canceled_30,
+ 	SUM(is_active_87)+SUM(is_active_30) AS total_active,
+ 	SUM(is_canceled_87)+SUM(is_canceled_30) AS total_canceled
+ FROM status
+ GROUP BY month
+) 
+
+-- Question 2.5
+SELECT month, 
+1.0*sum_canceled_87/sum_active_87 AS [Churn 87], 
+1.0*sum_canceled_30/sum_active_30 AS [Churn 30], 1.0*(total_canceled)/(total_active) AS [Total Churn]
+FROM status_aggregate;
+*/
+
+
+
+/*
+-- Question 3 the suggested way
+ WITH months AS
+ (Select 
+  '2017-01-01' AS first_day, 
+  '2017-01-31' AS last_day
+  UNION
+  Select 
+  '2017-02-01' AS first_day, 
+  '2017-02-28' AS last_day
+  UNION
+  Select 
+  '2017-03-01' AS first_day, 
+  '2017-03-31' AS last_day
+ ),
+ 
+ crossjoin AS
+ (SELECT * FROM subscriptions
+  CROSS JOIN months
+ ),
+
+status AS
+(SELECT id, first_day AS month, segment,
+
+ CASE
+	WHEN subscription_start < first_day AND
+      (subscription_end >= first_day OR subscription_end IS NULL) THEN 1 ELSE 0 
+ 	END
+ AS is_active,
+
+ CASE
+ 	WHEN subscription_end BETWEEN first_day AND last_day THEN 1 ELSE 0
+ 	END
+ AS is_canceled
+ 
+ FROM crossjoin
+),
+
+status_aggregate AS
+(SELECT month, segment,
+ 	SUM(is_active) AS sum_active,
+ 	SUM(is_canceled) AS sum_canceled
+ FROM status
+ GROUP BY month, segment
+ ORDER BY segment, month
+)
+
+SELECT month, segment, 1.0*sum_canceled/sum_active AS [Churn] FROM status_aggregate ORDER BY segment;
+*/
+
+
+
+-- Question 3 with nested queries
+
+SELECT segment, 
+
+1.0*SUM([Canceled in Jan])/SUM([Active in Jan]) AS [Churn in Jan], 
+
+1.0*SUM([Canceled in Feb])/SUM([Active in Feb]) AS [Churn in Feb], 
+
+1.0*SUM([Canceled in Mar])/SUM([Active in Mar]) AS [Churn in Mar] 
+
+FROM(  
+  SELECT *, 
+CASE WHEN subscription_start < '2017-01-01' AND (subscription_end >= '2017-01-01' OR subscription_end IS NULL) THEN 1 ELSE 0 END AS [Active in Jan],
+
+CASE WHEN subscription_start < '2017-02-01' AND (subscription_end >= '2017-02-01' OR subscription_end IS NULL) THEN 1 ELSE 0 END AS [Active in Feb],
+
+CASE WHEN subscription_start < '2017-03-01' AND (subscription_end >= '2017-03-01' OR subscription_end IS NULL) THEN 1 ELSE 0 END AS [Active in Mar],
+
+CASE WHEN subscription_end BETWEEN '2017-01-01' AND '2017-01-31' THEN 1 ELSE 0 END AS [Canceled in Jan],
+
+CASE WHEN subscription_end BETWEEN '2017-02-01' AND '2017-02-28' THEN 1 ELSE 0 END AS [Canceled in Feb],
+
+CASE WHEN subscription_end BETWEEN '2017-03-01' AND '2017-03-31' THEN 1 ELSE 0 END AS [Canceled in Mar]
+
+FROM subscriptions
+) GROUP BY segment;
